@@ -1,31 +1,42 @@
-/* 
- * Code for basic C skills diagnostic.
- * Developed for courses 15-213/18-213/15-513 by R. E. Bryant, 2017
- * Modified to store strings, 2018
- */
+# CSAPP-LAB0
+``任务是实现一个queue``
 
-/*
- * This program implements a queue supporting both FIFO and LIFO
- * operations.
- *
- * It uses a singly-linked list to represent the set of queue elements
- */
+## 数据结构
+```
+typedef struct ELE {
+    char *value;
+    struct ELE *next;
+} list_ele_t;
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
+/* Queue structure */
+typedef struct {
+    list_ele_t *head; 
+    int32_t q_size;
+    list_ele_t *tail;
+} queue_t;
+```
+## 操作接口
+```
+queue_t *q_new();
+void q_free(queue_t *q);
+bool q_insert_head(queue_t *q, char *s);
+bool q_insert_tail(queue_t *q, char *s);
+bool q_remove_head(queue_t *q, char *sp, size_t bufsize);
+int q_size(queue_t *q);
+void q_reverse(queue_t *q);
+```
 
-#include "harness.h"
-#include "queue.h"
+## 具体实现
+在所有实现中，都需要考虑的情况:
+1. allocate失败，直接返回，另外在返回前还需要将之前成功分配的内存回收
+2. queue为空
 
-/*
-  Create empty queue.
-  Return NULL if could not allocate space.
-*/
+
+q_new函数主要进行初始化工作，要同时初始化head, tail, q_size三个变量
+```
 queue_t *q_new()
 {
   queue_t *q = malloc(sizeof(queue_t));
-  /* What if malloc returned NULL? */
   if (q == NULL)
     return NULL;
   q->head = NULL;
@@ -33,36 +44,12 @@ queue_t *q_new()
   q->q_size = 0;
   return q;
 }
+```
 
-/* Free all storage used by queue */
-void q_free(queue_t *q)
-{
-  /* How about freeing the list elements and the strings? */
-  /* Free queue structure */
-  if(q == NULL)
-    return;
-  while (q->q_size > 0)
-  {
-    list_ele_t *t = q->head;
-    q->head = q->head->next;
-    free(t->value);
-    free(t);
-    t = NULL;
-    q->q_size -= 1;
-    if (q->q_size == 0)
-      q->tail = NULL;
-  }
-  free(q);
-}
+q_insert_head主要进行插入操作，需要判断队列是否为空，元素newh是否能分配，元素下的字符串newh->value是否能分配三种情况，特别需要注意的是,如果元素下的字符串不能分配，在返回的时候要回收newh的内存。
+另外如果插入的时候队列为空，还要初始化tail指针
 
-/*
-  Attempt to insert element at head of queue.
-  Return true if successful.
-  Return false if 
-  is NULL or could not allocate space.
-  Argument s points to the string to be stored.
-  The function must explicitly allocate space and copy the string into it.
- */
+```
 bool q_insert_head(queue_t *q, char *s)
 {
   if (q == NULL)
@@ -87,13 +74,10 @@ bool q_insert_head(queue_t *q, char *s)
   q->q_size += 1;
   return true;
 }
+```
 
-/*
-  Attempt to insert element at tail of queue.
-  Return  se if q is NULL or could not allocate space.
-  Argument s points to the string to be stored.
-  The function must explicitly allocate space and copy the string into it.
- */
+q_insert_tail需要注意的点跟之前相同，除了在最后要对队列为空的情况进行额外讨论
+```
 bool q_insert_tail(queue_t *q, char *s)
 {
   /* You need to write the complete code for this function */
@@ -122,15 +106,10 @@ bool q_insert_tail(queue_t *q, char *s)
   q->q_size += 1;
   return true;
 }
+```
 
-/*
-  Attempt to remove element from head of queue.
-  Return true if successful.
-  Return false if queue is NULL or empty.
-  If sp is non-NULL and an element is removed, copy the removed string to *sp
-  (up to a maximum of bufsize-1 characters, plus a null terminator.)
-  The space used by the list element and the string should be freed.
-*/
+删除首部元素时，要注意队列为空时，需要将tail指向空，另外第bufsize个元素是sp[bufsize - 1]
+```
 bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
 {
   /* Return false if queue is NULL or empty. */
@@ -145,33 +124,38 @@ bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
   free(t->value);
   free(t);
   t = NULL;
-  /* You need to fix up this code. */
   q->q_size -= 1;
   if (q->q_size == 0)
     q->tail = NULL;
   return true;
 }
+```
 
-/*
-  Return number of elements in queue.
-  Return 0 if q is NULL or empty
- */
-int q_size(queue_t *q)
+整体思路和删除首部元素类似，每次都会删除首部的一个元素，然后判断队列元素是否为空，当队列为空时，free整个队列
+```
+void q_free(queue_t *q)
 {
-  /* You need to write the code for this function */
-  /* Remember: It should operate in O(1) time */
+  /* How about freeing the list elements and the strings? */
+  /* Free queue structure */
   if(q == NULL)
-    return 0;
-  return q->q_size;
+    return;
+  while (q->q_size > 0)
+  {
+    list_ele_t *t = q->head;
+    q->head = q->head->next;
+    free(t->value);
+    free(t);
+    t = NULL;
+    q->q_size -= 1;
+    if (q->q_size == 0) 
+      q->tail = NULL; 
+  }
+  free(q);
 }
+```
 
-/*
-  Reverse elements in queue
-  No effect if q is NULL or empty
-  This function should not allocate or free any list elements
-  (e.g., by calling q_insert_head, q_insert_tail, or q_remove_head).
-  It should rearrange the existing ones.
- */
+翻转队列
+```
 void q_reverse(queue_t *q)
 {
   /* You need to write the code for this function */
@@ -181,7 +165,7 @@ void q_reverse(queue_t *q)
   list_ele_t* t_tail = q->tail;
   list_ele_t* t = q->head;
   list_ele_t* t_next = q->head->next;
-  t->next = NULL;
+  t->next = NULL; //这边需要注意，不加的话会变成循环队列的情况
   while(t_next != NULL){
     list_ele_t* t_next_next = t_next->next;
     t_next->next = t;
@@ -191,3 +175,4 @@ void q_reverse(queue_t *q)
   q->head = t_tail;
   q->tail = t_head;
 }
+```
