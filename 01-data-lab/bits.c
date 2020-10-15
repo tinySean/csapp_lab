@@ -143,7 +143,7 @@ NOTES:
  *   Rating: 1
  */
 int bitXor(int x, int y) {
-  return 2;
+  return ~(~(~x & y) & ~(x & ~y));
 }
 /* 
  * tmin - return minimum two's complement integer 
@@ -152,9 +152,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
-  return 2;
-
+  return 1 << 31;
 }
 //2
 /*
@@ -164,8 +162,11 @@ int tmin(void) {
  *   Max ops: 10
  *   Rating: 1
  */
+
 int isTmax(int x) {
-  return 2;
+  int y = x + 1;
+  x = x + y; // x此时应该为0xffffffff
+  return !(~x);
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -175,8 +176,10 @@ int isTmax(int x) {
  *   Max ops: 12
  *   Rating: 2
  */
+// 思路跟上一题类似，只是需要提前保留奇数位
 int allOddBits(int x) {
-  return 2;
+  int y = x & 0xAAAAAAAA;
+  return !(y ^ 0xAAAAAAAA);
 }
 /* 
  * negate - return -x 
