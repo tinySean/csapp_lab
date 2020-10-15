@@ -34,152 +34,63 @@ x /s 0x402400
 ```
 
 ## phase3
-在所有实现中，都需要考虑的情况:
-1. allocate失败，直接返回，另外在返回前还需要将之前成功分配的内存回收
-2. queue为空
-
-
-q_new函数主要进行初始化工作，要同时初始化head, tail, q_size三个变量
-```
-queue_t *q_new()
-{
-  queue_t *q = malloc(sizeof(queue_t));
-  if (q == NULL)
-    return NULL;
-  q->head = NULL;
-  q->tail = q->head;
-  q->q_size = 0;
-  return q;
-}
-```
-
-q_insert_head主要进行插入操作，需要判断队列是否为空，元素newh是否能分配，元素下的字符串newh->value是否能分配三种情况，特别需要注意的是,如果元素下的字符串不能分配，在返回的时候要回收newh的内存。
-另外如果插入的时候队列为空，还要初始化tail指针
 
 ```
-bool q_insert_head(queue_t *q, char *s)
-{
-  if (q == NULL)
-    return false;
-  /* allocate memory for list element */
-  list_ele_t *newh;
-  newh = malloc(sizeof(list_ele_t));
-  if (newh == NULL)
-    return false;
-  /* allocate memory for value */
-  newh->value = malloc(sizeof(char) * (strlen(s) + 1));
-  if (newh->value == NULL){
-    free(newh);
-    return false;
-  }
-  memcpy(newh->value, s, sizeof(char) * (strlen(s) + 1));
-  /* insert the element at head of queue */
-  newh->next = q->head;
-  q->head = newh;
-  if (q->tail == NULL)
-    q->tail = q->head;
-  q->q_size += 1;
-  return true;
-}
+  # 读取两个数字分别存到0xc(%rsp)和0x8($rsp)
+  400f43:	48 83 ec 18          	sub    $0x18,%rsp
+  400f47:	48 8d 4c 24 0c       	lea    0xc(%rsp),%rcx
+  400f4c:	48 8d 54 24 08       	lea    0x8(%rsp),%rdx
+  400f51:	be cf 25 40 00       	mov    $0x4025cf,%esi
+  400f56:	b8 00 00 00 00       	mov    $0x0,%eax
+  400f5b:	e8 90 fc ff ff       	callq  400bf0 <__isoc99_sscanf@plt>
+  400f60:	83 f8 01             	cmp    $0x1,%eax
+  400f63:	7f 05                	jg     400f6a <phase_3+0x27>
+  400f65:	e8 d0 04 00 00       	callq  40143a <explode_bomb>
+
+  # 根据0x8(%rsp)中的值进行跳转，
+  400f6a:	83 7c 24 08 07       	cmpl   $0x7,0x8(%rsp)
+  400f6f:	77 3c                	ja     400fad <phase_3+0x6a>
+  400f71:	8b 44 24 08          	mov    0x8(%rsp),%eax
+  400f75:	ff 24 c5 70 24 40 00 	jmpq   *0x402470(,%rax,8)
+
+  # 值为1
+  400f7c:	b8 cf 00 00 00       	mov    $0xcf,%eax
+  400f81:	eb 3b                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为2
+  400f83:	b8 c3 02 00 00       	mov    $0x2c3,%eax
+  400f88:	eb 34                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为3
+  400f8a:	b8 00 01 00 00       	mov    $0x100,%eax
+  400f8f:	eb 2d                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为4
+  400f91:	b8 85 01 00 00       	mov    $0x185,%eax
+  400f96:	eb 26                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为5
+  400f98:	b8 ce 00 00 00       	mov    $0xce,%eax
+  400f9d:	eb 1f                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为6
+  400f9f:	b8 aa 02 00 00       	mov    $0x2aa,%eax
+  400fa4:	eb 18                	jmp    400fbe <phase_3+0x7b>
+
+  # 值为7
+  400fa6:	b8 47 01 00 00       	mov    $0x147,%eax
+  400fab:	eb 11                	jmp    400fbe <phase_3+0x7b>
+
+  # 根据跳转位置的不同，给0xc(%rsp)赋不同的值
+  400fad:	e8 88 04 00 00       	callq  40143a <explode_bomb>
+  400fb2:	b8 00 00 00 00       	mov    $0x0,%eax
+  400fb7:	eb 05                	jmp    400fbe <phase_3+0x7b>
+  400fb9:	b8 37 01 00 00       	mov    $0x137,%eax
+  400fbe:	3b 44 24 0c          	cmp    0xc(%rsp),%eax
+  400fc2:	74 05                	je     400fc9 <phase_3+0x86>
+  400fc4:	e8 71 04 00 00       	callq  40143a <explode_bomb>
+  400fc9:	48 83 c4 18          	add    $0x18,%rsp
+  400fcd:	c3                   	retq   
 ```
 
-q_insert_tail需要注意的点跟之前相同，除了在最后要对队列为空的情况进行额外讨论
-```
-bool q_insert_tail(queue_t *q, char *s)
-{
-  /* You need to write the complete code for this function */
-  /* Remember: It should operate in O(1) time */
-  if (q == NULL)
-    return false;
-  /* allocate memory for list element */
-  list_ele_t *newh;
-  newh = malloc(sizeof(list_ele_t));
-  if (newh == NULL)
-    return false;
-  /* allocate memory for value */
-  newh->value = malloc(sizeof(char) * (strlen(s) + 1));
-  if (newh->value == NULL){
-    free(newh);
-    return false;
-  }
-  memccpy(newh->value, s, sizeof(char) * (strlen(s) + 1), sizeof(char) * (strlen(s) + 1));
-  /* insert the element at tail of queue */
-  newh->next = NULL;
-  if (q->tail != NULL)
-    q->tail->next = newh;
-  q->tail = newh;
-  if (q->head == NULL)
-    q->head = q->tail;
-  q->q_size += 1;
-  return true;
-}
-```
-
-删除首部元素时，要注意队列为空时，需要将tail指向空，另外第bufsize个元素是sp[bufsize - 1]
-```
-bool q_remove_head(queue_t *q, char *sp, size_t bufsize)
-{
-  /* Return false if queue is NULL or empty. */
-  if (q == NULL || q->q_size == 0)
-    return false;
-  list_ele_t *t = q->head;
-  q->head = q->head->next;
-  if(sp != NULL){
-    memccpy(sp, t->value, sizeof(char) * (strlen(t->value) + 1), bufsize - 1);
-    sp[bufsize - 1] = '\0';
-  }
-  free(t->value);
-  free(t);
-  t = NULL;
-  q->q_size -= 1;
-  if (q->q_size == 0)
-    q->tail = NULL;
-  return true;
-}
-```
-
-整体思路和删除首部元素类似，每次都会删除首部的一个元素，然后判断队列元素是否为空，当队列为空时，free整个队列
-```
-void q_free(queue_t *q)
-{
-  /* How about freeing the list elements and the strings? */
-  /* Free queue structure */
-  if(q == NULL)
-    return;
-  while (q->q_size > 0)
-  {
-    list_ele_t *t = q->head;
-    q->head = q->head->next;
-    free(t->value);
-    free(t);
-    t = NULL;
-    q->q_size -= 1;
-    if (q->q_size == 0) 
-      q->tail = NULL; 
-  }
-  free(q);
-}
-```
-
-翻转队列
-```
-void q_reverse(queue_t *q)
-{
-  /* You need to write the code for this function */
-  if(q == NULL || q->q_size == 0)
-    return;
-  list_ele_t* t_head = q->head;
-  list_ele_t* t_tail = q->tail;
-  list_ele_t* t = q->head;
-  list_ele_t* t_next = q->head->next;
-  t->next = NULL; //这边需要注意，不加的话会变成循环队列的情况
-  while(t_next != NULL){
-    list_ele_t* t_next_next = t_next->next;
-    t_next->next = t;
-    t = t_next;
-    t_next = t_next_next;
-  }
-  q->head = t_tail;
-  q->tail = t_head;
-}
-```
+## phase4
