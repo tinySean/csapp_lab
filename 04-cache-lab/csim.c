@@ -122,7 +122,7 @@ void simulate(Cache *cache)
     // 每次读取一行，至于为啥这边要在%c前面加上空格，没搞太清楚，不加空格会出大问题
     while (fscanf(pFile, " %c %lx, %d", &access_type, &address, &size) > 0)
     {
-        printf("%c:%lx:%d\n", access_type, address, size);
+        // printf("%c:%lx:%d\n", access_type, address, size);
         // count用来记录时间戳信息，用于LRU淘汰算法
         count++;
         // 通过操作bit位来获取tag_bits, set_index_bits, block_offset_bits
@@ -135,20 +135,23 @@ void simulate(Cache *cache)
         case 'L':
             status = load(cache, tag_bits, set_index_bits, block_offset_bits);
             print_status(status, access_type, address, size);
-            printf("\n");
+            if (verbose_flag == 1)
+                printf("\n");
             break;
         // modify data，需要访问两次cache
         case 'M':
             status = load(cache, tag_bits, set_index_bits, block_offset_bits);
             print_status(status, access_type, address, size);
             hits++;
-            printf(" hit\n");
+            if (verbose_flag == 1)
+                printf(" hit\n");
             break;
         // store data，需要访问一次cache
         case 'S':
             status = load(cache, tag_bits, set_index_bits, block_offset_bits);
             print_status(status, access_type, address, size);
-            printf("\n");
+            if (verbose_flag == 1)
+                printf("\n");
             break;
         // 对于普通的instruction，直接ignore
         case 'I':
@@ -232,5 +235,6 @@ int main(int argc, char *argv[])
     Cache *cache = (Cache *)malloc(sizeof(Cache) * E * S);
     simulate(cache);
     printSummary(hits, misses, evictions);
+    free(cache);
     return 0;
 }

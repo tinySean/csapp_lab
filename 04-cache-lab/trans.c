@@ -22,6 +22,79 @@ int is_transpose(int M, int N, int A[N][M], int B[M][N]);
 char transpose_submit_desc[] = "Transpose submission";
 void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 {
+    if(M == 32){
+        // int i, j, k;
+        // for (i = 0; i < M; i += 8) {
+        //     for (j = 0; j < N; j ++){
+        //         for(k = i; k < i + 8; k++){
+        //             B[k][j] = A[j][k];
+        //         } 
+        //     }
+        // }
+
+        int i, j;
+        int temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7;
+        for (i = 0; i < M; i += 8) {
+            for (j = 0; j < N; j ++){
+                temp0 = A[j][i];
+                temp1 = A[j][i+1];
+                temp2 = A[j][i+2];
+                temp3 = A[j][i+3];
+                temp4 = A[j][i+4];
+                temp5 = A[j][i+5];
+                temp6 = A[j][i+6];
+                temp7 = A[j][i+7];
+                B[i][j] = temp0;
+                B[i+1][j] = temp1;
+                B[i+2][j] = temp2;
+                B[i+3][j] = temp3;
+                B[i+4][j] = temp4;
+                B[i+5][j] = temp5; 
+                B[i+6][j] = temp6; 
+                B[i+7][j] = temp7; 
+            }
+        }
+    }else if(M == 64){
+        int i, j;
+        int temp0, temp1, temp2, temp3;
+        for (i = 0; i < M; i += 4) {
+            for (j = 0; j < N; j ++){
+                temp0 = A[j][i];
+                temp1 = A[j][i+1];
+                temp2 = A[j][i+2];
+                temp3 = A[j][i+3];
+                
+                B[i+1][j] = temp1;
+                B[i+2][j] = temp2;
+                B[i][j] = temp0;
+                B[i+3][j] = temp3;
+            }
+        }
+    }else if(M == 61){
+        int i, j;
+        int temp0, temp1, temp2, temp3, temp4, temp5, temp6, temp7;
+        for (i = 0; i < M; i += 8) {
+            for (j = 0; j < N; j ++){
+                temp0 = A[j][i];
+                temp1 = A[j][i+1];
+                temp2 = A[j][i+2];
+                temp3 = A[j][i+3];
+                temp4 = A[j][i+4];
+                temp5 = A[j][i+5];
+                temp6 = A[j][i+6];
+                temp7 = A[j][i+7];
+                B[i][j] = temp0;
+                B[i+1][j] = temp1;
+                B[i+2][j] = temp2;
+                B[i+3][j] = temp3;
+                B[i+4][j] = temp4;
+                B[i+5][j] = temp5; 
+                B[i+6][j] = temp6; 
+                B[i+7][j] = temp7; 
+            }
+        }
+    }
+
 }
 
 /* 
