@@ -97,7 +97,7 @@ int main(int argc, char **argv)
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     dup2(1, 2);
-
+    
     /* Parse the command line */
     while ((c = getopt(argc, argv, "hvp")) != EOF) {
         switch (c) {
@@ -165,7 +165,32 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
-    return;
+    char *argv[MAXARGS];
+    char *buf[MAXLINE];
+    int bg;
+    pid_t pid;
+    sigset_t mask_all, prev_one, mask_one;
+    sigfillset(&mask_all);
+    sigaddset(&mask_one, SIG_BLOCK);
+
+    strcpy(buf, cmdline);
+    bg = parseline(buf, argv);
+    if(argv[0] == NULL){
+        return;
+    }
+    if(!builtin_cmd(argv)){
+        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+        if((pid == fork()) == 0){
+            do_bgfg(argv);
+        }
+        sigprocmask(SIG_BLOCK, )
+        if(!bg){
+            waitfg(pid);
+        }else{
+            printf("[%d] (%d) ", )
+            printf("%s %s &")
+        }
+    }
 }
 
 /* 
@@ -231,6 +256,16 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(!strcmp(argv[0], "quit")){
+        printf("reach here!");
+        _exit(0);
+    }else if(!strcmp(argv[0], "fg")){
+
+    }else if(!strcmp(argv[0], "bg")){
+
+    }else if(!strcmp(argv[0], "jobs")){
+
+    }
     return 0;     /* not a builtin command */
 }
 
@@ -239,6 +274,7 @@ int builtin_cmd(char **argv)
  */
 void do_bgfg(char **argv) 
 {
+    execve(argv[0], argv, environ);
     return;
 }
 
@@ -247,6 +283,8 @@ void do_bgfg(char **argv)
  */
 void waitfg(pid_t pid)
 {
+    int status;
+    waitpid(pid, &status, 0);
     return;
 }
 
