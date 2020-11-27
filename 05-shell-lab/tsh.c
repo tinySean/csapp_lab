@@ -38,7 +38,7 @@
 /* Global variables */
 extern char **environ;      /* defined in libc */
 char prompt[] = "tsh> ";    /* command line prompt (DO NOT CHANGE) */
-int verbose = 1;            /* if true, print additional output */
+int verbose = 0;            /* if true, print additional output */
 int nextjid = 1;            /* next job ID to allocate */
 char sbuf[MAXLINE];         /* for composing sprintf messages */
 
@@ -169,30 +169,34 @@ void eval(char *cmdline)
     char *buf[MAXLINE];
     int bg;
     pid_t pid;
-    sigset_t mask_all, prev_one, mask_one;
+    sigset_t mask_all, prev_mask, mask_two;
     sigfillset(&mask_all);
-    sigaddset(&mask_one, SIG_BLOCK);
-
+    sigaddset(&mask_two, SIGCHLD);
+    sigaddset(&mask_two, SIGINT);
+    sigaddset(&mask_two, SIGTSTP);
     strcpy(buf, cmdline);
     bg = parseline(buf, argv);
     if(argv[0] == NULL){
         return;
     }
     if(!builtin_cmd(argv)){
-        sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+        sigprocmask(SIG_BLOCK, &mask_two, &prev_mask);
         if((pid = fork()) == 0){
+            // 改变组id，不这么做的话，ctrl+c会杀掉所有进程
+            setpgid(0, 0);
+            sigprocmask(SIG_SETMASK, &prev_mask, NULL);
             execve(argv[0], argv, environ);
         }
         sigprocmask(SIG_BLOCK, &mask_all, NULL);
         if(!bg){
             //printf("[%d] (%d) %s", nextjid, pid, buf);
             addjob(jobs, pid, FG, buf);
-            sigprocmask(SIG_SETMASK, &prev_one, NULL);
+            sigprocmask(SIG_SETMASK, &prev_mask, NULL);
             waitfg(pid);
         }else{
             printf("[%d] (%d) %s", nextjid, pid, buf);
             addjob(jobs, pid, BG, buf);
-            sigprocmask(SIG_SETMASK, &prev_one, NULL);
+            sigprocmask(SIG_SETMASK, &prev_mask, NULL);
         }
     }
 }
@@ -290,10 +294,8 @@ void do_bgfg(char **argv)
 void waitfg(pid_t pid)
 {
     while(fgpid(jobs)){
-        printf("in loop\n");
         sleep(0);
     }
-    printf("reach here\n");
     return; 
 }
 
@@ -315,21 +317,34 @@ void sigchld_handler(int sig)
     pid_t pid;
 
     sigfillset(&mask_all);
-    while ((pid = waitpid(-1, NULL, 0)) > 0) { /* Reap a zombie child */
-        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-        deletejob(jobs, pid); /* Delete the child from the job list */
-        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    int status;
+    // 注意这边要加WNOHANG, 否则父进程会一直等待，直至它所有子进程都被回收
+    // 注意这边需要加WUNTRACED，为了让进程被ctrl-z时也能进入到循环中来 
+    // 另外注意：在使用ctrl+c时，首先发出SIGINT信号，随后使用kill函数让进程终止，进程终止后会发出SIGCHLD信号（这一步跟kill函数直接相关）
+    // 另外注意：在使用ctrl+z时，首先发出SIGTSNP信号，随后使用kill函数让进程暂停，进程暂停后会发出SIGCHLD信号 （这一步跟kill函数直接相关）
+    while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED )) > 0) { /* Reap a zombie child */
+        // 正常退出
+        if(WIFEXITED(status)){
+            sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+            deletejob(jobs, pid); 
+            sigprocmask(SIG_SETMASK, &prev_all, NULL);
+        }
+        // 异常终止，即ctrl+c, 使用WTERMSIG(status)来表示引发进程终止的信号值
+        else if(WIFSIGNALED(status)){
+            printf("Job [%d] (%d) terminated by signal %d\n", pid2jid(pid), pid, WTERMSIG(status));
+            sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+            deletejob(jobs, pid); 
+            sigprocmask(SIG_SETMASK, &prev_all, NULL);
+        }
+        // 暂停，即ctrl+z, 使用WSTOPSIG(status)来表示引发进程暂停的信号值
+        else if(WIFSTOPPED(status)){
+            printf("Job [%d] (%d) stopped by signal %d\n", pid2jid(pid), pid, WSTOPSIG(status));
+            struct job_t* job = getjobpid(jobs, pid);
+            sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+            job->state = ST;
+            sigprocmask(SIG_SETMASK, &prev_all, NULL);
+        }
     }
-    if (errno != ECHILD)
-        app_error("waitpid error");
-
-    sigfillset(&mask_all);
-    if(pid = waitpid(-1, NULL, 0)){ /* Reap a zombie child */
-        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
-        deletejob(jobs, pid); /* Delete the child from the job list */
-        sigprocmask(SIG_SETMASK, &prev_all, NULL);
-    }
-    
     errno = olderrno;
 }
 
@@ -340,6 +355,19 @@ void sigchld_handler(int sig)
  */
 void sigint_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+    //listjobs(jobs);
+    //printf("Job [%d] (%d) terminated by signal %d\n", 1, 1, sig);
+    sigfillset(&mask_all);
+    while ((pid = fgpid(jobs)) > 0) {
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        // 通过kill函数来发出信号，从而进入sigchld，负号表示向整个进程组发出命令
+        kill(-pid, SIGINT);
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+    errno = olderrno;
     return;
 }
 
@@ -350,6 +378,18 @@ void sigint_handler(int sig)
  */
 void sigtstp_handler(int sig) 
 {
+    int olderrno = errno;
+    sigset_t mask_all, prev_all;
+    pid_t pid;
+    sigfillset(&mask_all);
+    // 这边括号位置得放对了，不然可能导致会出现 pid = fgpid(jobs) > 0， pid每次都会1，最终让-1进程组暂停！！
+    if((pid = fgpid(jobs)) > 0){
+        sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+        // 负号表示向整个进程组发出命令
+        kill(-pid, SIGTSTP);
+        sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
+    errno = olderrno;
     return;
 }
 
@@ -439,6 +479,7 @@ pid_t fgpid(struct job_t *jobs) {
 
     for (i = 0; i < MAXJOBS; i++)
 	if (jobs[i].state == FG){
+        // printf("fg : %d\n", jobs[i].pid);
 	    return jobs[i].pid;
     }
     return 0;

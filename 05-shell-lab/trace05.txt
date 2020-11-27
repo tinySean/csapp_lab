@@ -1,11 +1,11 @@
 #
 # trace05.txt - Process jobs builtin command.
 #
-/bin/echo -e echo tsh> ./myspin 10 \046
-./myspin 10 &
+/bin/echo -e tsh> ./myspin 3 \046
+./myspin 3 &
 
-/bin/echo -e echo tsh> ./myspin 10 \046
-./myspin 10 &
+/bin/echo -e tsh> ./myspin 5 \046
+./myspin 5 &
 
-/bin/echo echo tsh> jobs
+/bin/echo tsh> jobs
 jobs
