@@ -185,6 +185,7 @@ void eval(char *cmdline)
             // 改变组id，不这么做的话，ctrl+c会杀掉所有进程
             setpgid(0, 0);
             sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+            // 判断路径是否有该程序，如果执行不成功，则说明不存在
             if(execve(argv[0], argv, environ) < 0){
                 // 这里不能用buf，因为execve在会把原有的地址空间中的变量给刷掉，只能用argv[0]
                 printf("%s: Command not found\n", argv[0]);
@@ -193,9 +194,9 @@ void eval(char *cmdline)
         }
         sigprocmask(SIG_BLOCK, &mask_all, NULL);
         if(!bg){
-            //printf("[%d] (%d) %s", nextjid, pid, buf);
             addjob(jobs, pid, FG, buf);
             sigprocmask(SIG_SETMASK, &prev_mask, NULL);
+            // 等待前台任务执行完成
             waitfg(pid);
         }else{
             printf("[%d] (%d) %s", nextjid, pid, buf);
@@ -286,7 +287,6 @@ int builtin_cmd(char **argv)
 /*
  * isdigits - Determine whether the string is all numbers 
  */
-
 int isdigits(char* str){
     int i = 0;
     while(str[i] != '\0'){
@@ -304,26 +304,32 @@ int isdigits(char* str){
  */
 void do_bgfg(char **argv) 
 {
+    // bg fg后面必须要有pid或者%jid
     if(argv[1] == NULL){
         printf("%s command requires PID or %%jobid argument\n", argv[0]);
         return;
     }
     struct job_t* job;
     if(argv[1][0] == '%'){
+        // 判断后面的jid是否合法
         if(!isdigits(argv[1] + 1)){
             printf("%s: argument must be a PID or %%jobid\n", argv[0]);
             return;
         }
+        // 获取job
         int jid = atoi(argv[1] + 1);
         job = getjobjid(jobs, jid);
     }else{
+        // 判断后面的pid是否合法
         if(!isdigits(argv[1])){
             printf("%s: argument must be a PID or %%jobid\n", argv[0]);
             return;
         }
+        // 获取job
         int pid = atoi(argv[1]);
         job = getjobpid(jobs, pid);
     }
+    // 判断jobs是否存在，即job是否在jobs列表里面
     if(argv[1][0] == '%' && job == NULL){
         printf("%s: No such job\n", argv[1]);
         return;
@@ -332,16 +338,21 @@ void do_bgfg(char **argv)
         printf("(%s): No such process\n", argv[1]);
         return;
     }
-    // 下面的kill注意都要用负号，以向进程组发送信号，
+    // 下面的kill注意都要用负号，以向进程组发送信号
+    // 处理fg
     if(!strcmp(argv[0], "fg")){
+        // 对于暂停的job，发送SIGCONT信号
         if(job->state == ST){
             kill(-job->pid, SIGCONT);
         }
+        // 改变job的状态，让它在前台工作，并且等待它运行结束
         if(job->state == BG || job->state == ST){
             job->state = FG;
             waitfg(job->pid);
         }
+    // 处理bg
     }else if(!strcmp(argv[0], "bg")){
+        // 对于暂停的job，发送SIGCONT信号，并改变它的状态，让其工作在后台
         if(job->state == ST){
             kill(-job->pid, SIGCONT);
             printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
@@ -375,10 +386,11 @@ void waitfg(pid_t pid)
  */
 void sigchld_handler(int sig) 
 {
+    // 首先保存错误信号
     int olderrno = errno;
     sigset_t mask_all, prev_all;
     pid_t pid;
-
+    // 这里使用信号集mask_all在关键的位置BLOCK其他信号，类似一种互斥锁
     sigfillset(&mask_all);
     int status;
     // 注意这边要加WNOHANG, 否则父进程会一直等待，直至它所有子进程都被回收
@@ -386,20 +398,20 @@ void sigchld_handler(int sig)
     // 另外注意：在使用ctrl+c时，首先发出SIGINT信号，随后使用kill函数让进程终止，进程终止后会发出SIGCHLD信号（这一步跟kill函数直接相关）
     // 另外注意：在使用ctrl+z时，首先发出SIGTSNP信号，随后使用kill函数让进程暂停，进程暂停后会发出SIGCHLD信号 （这一步跟kill函数直接相关）
     while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED )) > 0) { /* Reap a zombie child */
-        // 正常退出
+        // 正常退出，删除任务列表中的任务
         if(WIFEXITED(status)){
             sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
             deletejob(jobs, pid); 
             sigprocmask(SIG_SETMASK, &prev_all, NULL);
         }
-        // 异常终止，即ctrl+c, 使用WTERMSIG(status)来表示引发进程终止的信号值
+        // 异常终止，即ctrl+c, 使用WTERMSIG(status)来表示引发进程终止的信号值，删除任务列表中的任务
         else if(WIFSIGNALED(status)){
             printf("Job [%d] (%d) terminated by signal %d\n", pid2jid(pid), pid, WTERMSIG(status));
             sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
             deletejob(jobs, pid); 
             sigprocmask(SIG_SETMASK, &prev_all, NULL);
         }
-        // 暂停，即ctrl+z, 使用WSTOPSIG(status)来表示引发进程暂停的信号值
+        // 暂停，即ctrl+z, 使用WSTOPSIG(status)来表示引发进程暂停的信号值，修改任务的状态
         else if(WIFSTOPPED(status)){
             printf("Job [%d] (%d) stopped by signal %d\n", pid2jid(pid), pid, WSTOPSIG(status));
             struct job_t* job = getjobpid(jobs, pid);
@@ -421,8 +433,6 @@ void sigint_handler(int sig)
     int olderrno = errno;
     sigset_t mask_all, prev_all;
     pid_t pid;
-    //listjobs(jobs);
-    //printf("Job [%d] (%d) terminated by signal %d\n", 1, 1, sig);
     sigfillset(&mask_all);
     while ((pid = fgpid(jobs)) > 0) {
         sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
