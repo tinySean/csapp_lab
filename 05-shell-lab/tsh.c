@@ -97,7 +97,6 @@ int main(int argc, char **argv)
     /* Redirect stderr to stdout (so that driver will get all output
      * on the pipe connected to stdout) */
     dup2(1, 2);
-    
     /* Parse the command line */
     while ((c = getopt(argc, argv, "hvp")) != EOF) {
         switch (c) {
@@ -144,6 +143,7 @@ int main(int argc, char **argv)
 	}
 
 	/* Evaluate the command line */
+
 	eval(cmdline);
 	fflush(stdout);
 	fflush(stdout);
@@ -166,7 +166,7 @@ int main(int argc, char **argv)
 void eval(char *cmdline) 
 {
     char *argv[MAXARGS];
-    char *buf[MAXLINE];
+    char buf[MAXLINE];
     int bg;
     pid_t pid;
     sigset_t mask_all, prev_mask, mask_two;
@@ -185,7 +185,11 @@ void eval(char *cmdline)
             // 改变组id，不这么做的话，ctrl+c会杀掉所有进程
             setpgid(0, 0);
             sigprocmask(SIG_SETMASK, &prev_mask, NULL);
-            execve(argv[0], argv, environ);
+            if(execve(argv[0], argv, environ) < 0){
+                // 这里不能用buf，因为execve在会把原有的地址空间中的变量给刷掉，只能用argv[0]
+                printf("%s: Command not found\n", argv[0]);
+                exit(1);
+            }
         }
         sigprocmask(SIG_BLOCK, &mask_all, NULL);
         if(!bg){
@@ -279,12 +283,71 @@ int builtin_cmd(char **argv)
     return 0;     /* not a builtin command */
 }
 
+/*
+ * isdigits - Determine whether the string is all numbers 
+ */
+
+int isdigits(char* str){
+    int i = 0;
+    while(str[i] != '\0'){
+        if(!isdigit(str[i])){
+            return 0;
+        }
+        // 注意要写++， 不然死循环
+        i++;
+    }
+    return 1;
+}
+
 /* 
  * do_bgfg - Execute the builtin bg and fg commands
  */
 void do_bgfg(char **argv) 
 {
-    execve(argv[0], argv, environ);
+    if(argv[1] == NULL){
+        printf("%s command requires PID or %%jobid argument\n", argv[0]);
+        return;
+    }
+    struct job_t* job;
+    if(argv[1][0] == '%'){
+        if(!isdigits(argv[1] + 1)){
+            printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+            return;
+        }
+        int jid = atoi(argv[1] + 1);
+        job = getjobjid(jobs, jid);
+    }else{
+        if(!isdigits(argv[1])){
+            printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+            return;
+        }
+        int pid = atoi(argv[1]);
+        job = getjobpid(jobs, pid);
+    }
+    if(argv[1][0] == '%' && job == NULL){
+        printf("%s: No such job\n", argv[1]);
+        return;
+    }
+    if(argv[1][0] != '%' && job == NULL){
+        printf("(%s): No such process\n", argv[1]);
+        return;
+    }
+    // 下面的kill注意都要用负号，以向进程组发送信号，
+    if(!strcmp(argv[0], "fg")){
+        if(job->state == ST){
+            kill(-job->pid, SIGCONT);
+        }
+        if(job->state == BG || job->state == ST){
+            job->state = FG;
+            waitfg(job->pid);
+        }
+    }else if(!strcmp(argv[0], "bg")){
+        if(job->state == ST){
+            kill(-job->pid, SIGCONT);
+            printf("[%d] (%d) %s", job->jid, job->pid, job->cmdline);
+            job->state = BG;
+        }
+    }
     return;
 }
 

@@ -1,8 +1,8 @@
 #
 # trace14.txt - Simple error handling
 #
-/bin/echo tsh> ./bogus
-./bogus
+/bin/echo tsh> ./bogus 123
+./bogus 123
 
 /bin/echo -e tsh> ./myspin 4 \046
 ./myspin 4 &
